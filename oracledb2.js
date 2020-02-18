@@ -3,10 +3,9 @@ const _ = require('lodash');
 
 module.exports = function (RED) {
     function getConnectString(host, port, connectionType, connectionTypeValue) {
-        if(!connectionType){
+        if (!connectionType) {
             connectionType = 'SERVICE_NAME';
         }
-        console.log('host:'+host+' port:'+port+' connectionType:'+connectionType+' connectionTypeValue:'+connectionTypeValue);
         return `(DESCRIPTION = 
                     (ADDRESS = (PROTOCOL = TCP)(HOST = ${host})(PORT = ${port}))
                     (CONNECT_DATA = (${connectionType} = ${connectionTypeValue}))
@@ -14,7 +13,6 @@ module.exports = function (RED) {
     }
 
     function getConnection(user, password, connectString) {
-        console.log('\n\n\n\n\n connectString:'+ connectString);
         return oracledb.getConnection({user, password, connectString});
     }
 
@@ -24,12 +22,11 @@ module.exports = function (RED) {
 
     function releaseConnection(conn, node) {
         if (conn) {
-            conn.close(err => {
-                if (err) {
+            conn.close(err1 => {
+                if (err1) {
                     setNodeStatus(node, "red", "Error disconnecting");
-                    console.error('Error while releasing connection:', err.message);
+                    node.send([null, {err: `Oracle error closing resultSet: ${err1.message}`}]);
                 } else {
-                    console.log('Connection successfully released');
                     setNodeStatus(node, "grey", "disconnected");
                 }
             });
@@ -43,12 +40,12 @@ module.exports = function (RED) {
         if (metadata) {
             outputMsg.metadata = metadata;
         }
+        delete outputMsg.query;
         return outputMsg;
     }
 
     function OracleDBNode(config) {
         RED.nodes.createNode(this, config);
-        console.log('\n\n\n\n\n in OracleDBNode constructor... config is:', config);
         this.host = config.host;
         this.port = config.port;
         this.connectionType = config.connectionType;
@@ -66,21 +63,21 @@ module.exports = function (RED) {
             const resultLimit = msg.resultLimit || node.resultLimit;
             resultSet.getRows(resultLimit, function (err, rows) {
                 if (err) {
-                    node.send([null, {err: "Oracle resultSet error: " + err.message}]);
+                    node.send([null, {err: `Oracle resultSet error: ${err.message}`}]);
                 } else if (rows.length === 0) {
-                    if(!sentLastRowFlag){
+                    if (!sentLastRowFlag) {
                         const outputMsg = getOutputMsg(msg, rows, metadata, true);
                         node.send([outputMsg, null]);
                     }
                     resultSet.close(function (err1) {
                         if (err1) {
-                            node.send([null, {err: "Oracle error closing resultSet: " + err1.message}]);
+                            node.send([null, {err: `Oracle error closing resultSet: ${err1.message}`}]);
                         }
                     });
                     releaseConnection(connection, node);
                 } else {
                     const lastRow = rows.length < resultLimit;
-                    if(lastRow){
+                    if (lastRow) {
                         sentLastRowFlag = true;
                     }
                     const outputMsg = getOutputMsg(msg, rows, metadata, lastRow);
@@ -97,7 +94,7 @@ module.exports = function (RED) {
             msg.query = query;
             msg.payload = '';
             if (typeof query !== 'string') {
-                msg.error = 'Query cannot be null- ensure msg.payload contains query to execute';
+                msg.error = 'Invalid query- ensure msg.payload contains query to execute';
                 node.send([null, msg]);
                 return;
             }
@@ -131,7 +128,6 @@ module.exports = function (RED) {
                         releaseConnection(connection, node);
                     }
                 }).catch(err => {
-                    console.log(err);
                     msg.error = '' + err;
                     node.send([null, msg]);
                     releaseConnection(connection, node);
@@ -139,7 +135,6 @@ module.exports = function (RED) {
             } catch (e) {
                 msg.error = '' + e;
                 node.send([null, msg]);
-                console.log('error caught in outer block...', e);
             }
         });
     }
