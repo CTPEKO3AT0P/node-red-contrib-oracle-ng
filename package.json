@@ -23,6 +23,6 @@
   },
   "dependencies": {
     "lodash": "^4.17.11",
-    "oracledb": "^2.3.0"
+    "oracledb": "^4.2.0"
   }
 }
